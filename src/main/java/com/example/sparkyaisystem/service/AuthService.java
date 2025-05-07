@@ -4,6 +4,7 @@ import com.example.sparkyaisystem.exception.EmailAlreadyExistsException;
 import com.example.sparkyaisystem.model.dto.auth.LoginRequest;
 import com.example.sparkyaisystem.model.dto.auth.LoginResponse;
 import com.example.sparkyaisystem.model.dto.auth.RegisterRequest;
+import com.example.sparkyaisystem.model.dto.user.UserRequest;
 import com.example.sparkyaisystem.model.entity.Company;
 import com.example.sparkyaisystem.model.entity.Role;
 import com.example.sparkyaisystem.model.entity.User;
@@ -68,9 +69,6 @@ public class AuthService {
 
     @Transactional
     public User registerSparkyAdmin(RegisterRequest registerRequest) {
-        if (userRepository.existsByEmail(registerRequest.getEmail())) {
-            throw new EmailAlreadyExistsException("Email is already in use: " + registerRequest.getEmail());
-        }
 
         User user = new User();
         user.setFirstName(registerRequest.getFirstName());
@@ -122,4 +120,18 @@ public class AuthService {
 
         return userRepository.save(user);
     }
+
+
+    @Transactional
+    public User updateUser(UserRequest userRequest) {
+        User user = userRepository.findByEmail(userRequest.getEmail())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.setFirstName(userRequest.getFirstName());
+        user.setLastName(userRequest.getLastName());
+        user.setPassword(passwordEncoder.encode(userRequest.getPassword()));
+
+        return userRepository.save(user);
+    }
+
 }

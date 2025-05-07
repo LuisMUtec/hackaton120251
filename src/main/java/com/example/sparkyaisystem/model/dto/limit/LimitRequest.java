@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class LimitRequest {
 
-    @NotNull(message = "User ID is required")
+    //@NotNull(message = "User ID is required")
     private Long userId;
 
     @NotNull(message = "Model ID is required")

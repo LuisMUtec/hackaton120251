@@ -91,14 +91,7 @@ public class UserService {
             throw new RuntimeException("Email is already in use");
         }
 
-        user.setFirstName(userRequest.getFirstName());
-        user.setLastName(userRequest.getLastName());
-        user.setEmail(userRequest.getEmail());
-        // Only update password if it's provided
-        if (userRequest.getPassword() != null && !userRequest.getPassword().isEmpty()) {
-            // Password should be encoded in a real application
-            user.setPassword(userRequest.getPassword());
-        }
+        user = authService.updateUser(userRequest);
 
         return mapToUserResponse(userRepository.save(user));
     }
