@@ -13,6 +13,7 @@ import com.example.sparkyaisystem.service.AIModelService;
 import com.example.sparkyaisystem.service.RequestService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import lombok.AllArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@AllArgsConstructor
 @RestController
 @RequestMapping("/api/ai")
 @PreAuthorize("hasAnyRole('USER', 'COMPANY_ADMIN', 'SPARKY_ADMIN')")
@@ -29,16 +31,6 @@ public class AIController {
     private final AIModelService aiModelService;
     private final UserRepository userRepository;
     private final JwtTokenProvider jwtTokenProvider;
-
-    public AIController(RequestService requestService,
-                        AIModelService aiModelService,
-                        UserRepository userRepository,
-                        JwtTokenProvider jwtTokenProvider) {
-        this.requestService = requestService;
-        this.aiModelService = aiModelService;
-        this.userRepository = userRepository;
-        this.jwtTokenProvider = jwtTokenProvider;
-    }
 
     // Helper method to get user from JWT token
     private User getUserFromToken(HttpServletRequest request) {
