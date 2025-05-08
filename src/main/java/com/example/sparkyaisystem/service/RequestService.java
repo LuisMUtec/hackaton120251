@@ -97,7 +97,7 @@ public class RequestService {
             request = requestRepository.save(request);
             log.info("Chat request processed successfully, request ID: {}", request.getId());
 
-            // Get user's limit for this model
+            // Get user's limit for this modele
             Limit limit = limitRepository.findByUserAndModel(user, model)
                     .orElseThrow(() -> new RuntimeException("User does not have a limit for this model"));
 
@@ -135,6 +135,27 @@ public class RequestService {
                     .build();
         }
     }
+
+    public Limit getOrCreateDefaultLimit(User user, AIModel model) {
+        return limitRepository.findByUserAndModel(user, model)
+                .orElseGet(() -> {
+                    Limit defecto = new Limit();
+                    defecto.setUser(user);
+                    defecto.setModel(model);
+                    // valores por defecto
+                    defecto.setMaxRequestsPerWindow(100);
+                    defecto.setMaxTokensPerWindow(10000);
+                    defecto.setWindowType("daily");
+                    defecto.setUsedRequests(0);
+                    defecto.setUsedTokens(0);
+                    LocalDateTime now = LocalDateTime.now();
+                    defecto.setWindowStartTime(now);
+                    defecto.setWindowEndTime(now.plusDays(1));
+                    // persisto en BD
+                    return limitRepository.save(defecto);
+                });
+    }
+
 
     @Transactional
     public AIResponse processCompletionRequest(User user, CompletionRequest completionRequest) {
@@ -290,6 +311,7 @@ public class RequestService {
             // Get user's limit for this model
             Limit limit = limitRepository.findByUserAndModel(user, model)
                     .orElseThrow(() -> new RuntimeException("User does not have a limit for this model"));
+
 
             // Build response
             return AIResponse.builder()
