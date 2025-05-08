@@ -1,12 +1,9 @@
 package com.example.sparkyaisystem.service;
 
 import com.example.sparkyaisystem.model.dto.aimodel.AIModelResponse;
-import com.example.sparkyaisystem.model.entity.AIModel;
-import com.example.sparkyaisystem.model.entity.Company;
-import com.example.sparkyaisystem.model.entity.Restriction;
-import com.example.sparkyaisystem.model.entity.User;
-import com.example.sparkyaisystem.repository.AIModelRepository;
-import com.example.sparkyaisystem.repository.RestrictionRepository;
+import com.example.sparkyaisystem.model.entity.*;
+import com.example.sparkyaisystem.repository.*;
+import com.example.sparkyaisystem.service.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,23 +15,52 @@ public class AIModelService {
 
     private final AIModelRepository aiModelRepository;
     private final RestrictionRepository restrictionRepository;
+    private final OpenAiService openAiService;
+    private final MetaService metaService;
+    private final DeepSpeakService deepSpeakService;
 
-    public AIModelService(AIModelRepository aiModelRepository, RestrictionRepository restrictionRepository) {
+    public AIModelService(
+            AIModelRepository aiModelRepository,
+            RestrictionRepository restrictionRepository,
+            OpenAiService openAiService,
+            MetaService metaService,
+            DeepSpeakService deepSpeakService
+    ) {
         this.aiModelRepository = aiModelRepository;
         this.restrictionRepository = restrictionRepository;
+        this.openAiService = openAiService;
+        this.metaService = metaService;
+        this.deepSpeakService = deepSpeakService;
     }
 
-    @Transactional
-    public AIModelResponse createModel(AIModel model) {
-        if (aiModelRepository.existsByName(model.getName())) {
-            throw new RuntimeException("AI Model with this name already exists");
+    public String callModel(AIModel model, String prompt) {
+        String response;
+
+        if ("OpenAI".equalsIgnoreCase(model.getProvider())) {
+            response = openAiService.callOpenAi(model, prompt);
+        } else if ("Meta".equalsIgnoreCase(model.getProvider())) {
+            response = metaService.callMeta(model, prompt);
+        } else if ("DeepSpeak".equalsIgnoreCase(model.getProvider())) {
+            response = deepSpeakService.callDeepSpeak(model, prompt);
+        } else {
+            throw new IllegalArgumentException("Proveedor no soportado: " + model.getProvider());
         }
-        
-        return mapToAIModelResponse(aiModelRepository.save(model));
+
+        return response;
     }
 
-    public List<AIModelResponse> getAllModels() {
-        return aiModelRepository.findAll().stream()
+    public List<AIModelResponse> getAvailableModelsForUser(User user) {
+        Company company = user.getCompany();
+        if (company == null) {
+            throw new RuntimeException("User does not belong to a company");
+        }
+
+        List<Restriction> restrictions = restrictionRepository.findByCompany(company);
+        List<AIModel> activeModels = aiModelRepository.findByActive(true);
+
+        return activeModels.stream()
+                .filter(model -> restrictions.stream()
+                        .anyMatch(r -> r.getModel().getId().equals(model.getId())))
                 .map(this::mapToAIModelResponse)
                 .collect(Collectors.toList());
     }
@@ -45,81 +71,16 @@ public class AIModelService {
                 .collect(Collectors.toList());
     }
 
-    public AIModelResponse getModelById(Long id) {
-        AIModel model = aiModelRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("AI Model not found"));
-        
-        return mapToAIModelResponse(model);
-    }
-
-    @Transactional
-    public AIModelResponse updateModel(Long id, AIModel modelDetails) {
-        AIModel model = aiModelRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("AI Model not found"));
-        
-        // Check if name is being changed and if it's already taken
-        if (!model.getName().equals(modelDetails.getName()) && 
-                aiModelRepository.existsByName(modelDetails.getName())) {
-            throw new RuntimeException("AI Model with this name already exists");
-        }
-        
-        model.setName(modelDetails.getName());
-        model.setProvider(modelDetails.getProvider());
-        model.setType(modelDetails.getType());
-        model.setActive(modelDetails.isActive());
-        model.setDescription(modelDetails.getDescription());
-        
-        return mapToAIModelResponse(aiModelRepository.save(model));
-    }
-
-    @Transactional
-    public AIModelResponse toggleModelStatus(Long id, boolean active) {
-        AIModel model = aiModelRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("AI Model not found"));
-        
-        model.setActive(active);
-        
-        return mapToAIModelResponse(aiModelRepository.save(model));
-    }
-
-    public List<AIModelResponse> getAvailableModelsForUser(User user) {
-        // Get user's company
-        Company company = user.getCompany();
-        if (company == null) {
-            throw new RuntimeException("User does not belong to a company");
-        }
-        
-        // Get company restrictions
-        List<Restriction> restrictions = restrictionRepository.findByCompany(company);
-        
-        // Get all active models
-        List<AIModel> activeModels = aiModelRepository.findByActive(true);
-        
-        // Filter models based on company restrictions
-        return activeModels.stream()
-                .filter(model -> restrictions.stream()
-                        .anyMatch(r -> r.getModel().getId().equals(model.getId())))
-                .map(model -> {
-                    AIModelResponse response = mapToAIModelResponse(model);
-                    response.setAvailable(true);
-                    return response;
-                })
-                .collect(Collectors.toList());
-    }
-
     public boolean isModelAvailableForUser(User user, AIModel model) {
-        // Check if model is active
         if (!model.isActive()) {
             return false;
         }
-        
-        // Get user's company
+
         Company company = user.getCompany();
         if (company == null) {
             return false;
         }
-        
-        // Check if company has a restriction for this model
+
         return restrictionRepository.existsByCompanyAndModel(company, model);
     }
 
@@ -131,14 +92,12 @@ public class AIModelService {
                 .type(model.getType())
                 .active(model.isActive())
                 .description(model.getDescription())
-                .available(model.isActive()) // By default, available if active
+                .available(model.isActive())
                 .maxTokensPerRequest(getMaxTokensPerRequest(model.getProvider(), model.getType()))
                 .build();
     }
 
-    // Helper method to determine max tokens per request based on model provider and type
     private Integer getMaxTokensPerRequest(String provider, String type) {
-        // These values would typically come from configuration or the actual model specs
         if ("OpenAI".equalsIgnoreCase(provider)) {
             if ("chat".equalsIgnoreCase(type)) {
                 return 4096;
@@ -152,8 +111,7 @@ public class AIModelService {
         } else if ("DeepSpeak".equalsIgnoreCase(provider)) {
             return 1024;
         }
-        
-        // Default value
+
         return 1000;
     }
 }

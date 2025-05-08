@@ -86,11 +86,7 @@
             <artifactId>springdoc-openapi-starter-common</artifactId>
             <version>2.3.0</version>
         </dependency>
-        <dependency>
-            <groupId>io.github.cdimascio</groupId>
-            <artifactId>java-dotenv</artifactId>
-            <version>5.2.2</version> <!-- Verifica la versión más reciente -->
-        </dependency>
+
 
 
         <dependency>

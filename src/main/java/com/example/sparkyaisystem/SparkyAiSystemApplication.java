@@ -1,9 +1,10 @@
 package com.example.sparkyaisystem;
 
-import io.github.cdimascio.dotenv.Dotenv;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
+
+
 
 /**
  * Main application class for Sparky AI System.
@@ -14,17 +15,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class SparkyAiSystemApplication {
 
     public static void main(String[] args) {
-        Dotenv dotenv = Dotenv.configure().load();
-        
-        // Database properties
-        System.setProperty("JDBC_DATABASE_URL", dotenv.get("JDBC_DATABASE_URL"));
-        System.setProperty("JDBC_DATABASE_USERNAME", dotenv.get("JDBC_DATABASE_USERNAME"));
-        System.setProperty("JDBC_DATABASE_PASSWORD", dotenv.get("JDBC_DATABASE_PASSWORD"));
-        
-        // JWT properties
-        System.setProperty("JWT_SECRET_KEY", dotenv.get("JWT_SECRET_KEY"));
-        System.setProperty("JWT_EXPIRATION", dotenv.get("JWT_EXPIRATION"));
-
         SpringApplication.run(SparkyAiSystemApplication.class, args);
     }
 }
