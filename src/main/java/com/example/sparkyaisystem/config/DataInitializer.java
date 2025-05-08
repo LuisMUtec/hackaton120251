@@ -13,6 +13,7 @@ import com.example.sparkyaisystem.repository.LimitRepository;
 import com.example.sparkyaisystem.repository.RestrictionRepository;
 import com.example.sparkyaisystem.repository.UserRepository;
 import com.example.sparkyaisystem.service.AuthService;
+import com.example.sparkyaisystem.service.LimitService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
@@ -43,8 +44,8 @@ public class DataInitializer {
             if (aiModelRepository.count() == 0) {
                 log.info("Inicializando modelos AI...");
                 models = Arrays.asList(
-                        createModel("o4-mini", "OpenAI", "multimodal",
-                                "OpenAI's efficient multimodal model capaz de procesar texto e imágenes"),
+                        createModel("gpt-4o", "OpenAI", "multimodal",
+                                "OpenAI's GPT-4o model with multimodal capabilities"),
                         createModel("DeepSeek-V3-0324", "DeepSeek", "chat",
                                 "DeepSeek's advanced language model optimizado para razonamiento"),
                         createModel("Llama-4-Scout-17B-16E-Instruct", "Meta", "chat",
@@ -78,31 +79,49 @@ public class DataInitializer {
                 companyRepository.saveAll(Arrays.asList(company1, company2, company3));
 
                 // Company 1
-                User admin1 = createUser("John", "Smith", "admin1@techinnovate.com",
-                        "password123", Role.ROLE_COMPANY_ADMIN, company1);
-                User user1  = createUser("Alice", "Johnson", "user1@techinnovate.com",
-                        "password123", Role.ROLE_USER, company1);
-                userRepository.saveAll(Arrays.asList(admin1, user1));
-                company1.setAdmin(admin1);
-                company1.addUser(user1);
+                RegisterRequest admin1 = new RegisterRequest();
+                admin1.setFirstName("John");
+                admin1.setLastName("Smith");
+                admin1.setEmail("admin1@techinnovate.com");
+                admin1.setPassword("password123"); // la contraseña será hasheada en el servicio
+                authService.registerCompanyAdmin(admin1,company1);
+                RegisterRequest userReq1 = new RegisterRequest();
+                userReq1.setFirstName("Alice");
+                userReq1.setLastName("Johnson");
+                userReq1.setCompanyId(company1.getId());
+                userReq1.setEmail("user1@techinnovate.com");
+                userReq1.setPassword("password123"); // la contraseña será hasheada en el servicio
+                User user1 = authService.registerUser(userReq1);
 
                 // Company 2
-                User admin2 = createUser("Maria", "Garcia", "admin2@datasolutions.com",
-                        "password123", Role.ROLE_COMPANY_ADMIN, company2);
-                User user2  = createUser("David", "Wilson", "user2@datasolutions.com",
-                        "password123", Role.ROLE_USER, company2);
-                userRepository.saveAll(Arrays.asList(admin2, user2));
-                company2.setAdmin(admin2);
-                company2.addUser(user2);
+                RegisterRequest admin2 = new RegisterRequest();
+                admin2.setFirstName("Maria");
+                admin2.setLastName("Garcia");
+                admin2.setEmail("admin2@datasolutions.com");
+                admin2.setPassword("password123"); // la contraseña será hasheada en el servicio
+                authService.registerCompanyAdmin(admin2,company2);
+                RegisterRequest userReq2 = new RegisterRequest();
+                userReq2.setFirstName("David");
+                userReq2.setLastName("Wilson");
+                userReq2.setEmail("user2@datasolutions.com");
+                userReq2.setPassword("password123"); // la contraseña será hasheada en el servicio
+                userReq2.setCompanyId(company2.getId());
+                User user2 = authService.registerUser(userReq2);
 
                 // Company 3
-                User admin3 = createUser("Robert", "Chen", "admin3@aiventures.com",
-                        "password123", Role.ROLE_COMPANY_ADMIN, company3);
-                User user3  = createUser("Sophia", "Lee", "user3@aiventures.com",
-                        "password123", Role.ROLE_USER, company3);
-                userRepository.saveAll(Arrays.asList(admin3, user3));
-                company3.setAdmin(admin3);
-                company3.addUser(user3);
+                RegisterRequest admin3 = new RegisterRequest();
+                admin3.setFirstName("Robert");
+                admin3.setLastName("Chen");
+                admin3.setEmail("admin3@aiventures.com");
+                admin3.setPassword("password123"); // la contraseña será hasheada en el servicio
+                authService.registerCompanyAdmin(admin3,company3);
+                RegisterRequest userReq3 = new RegisterRequest();
+                userReq3.setFirstName("Sophia");
+                userReq3.setLastName("Lee");
+                userReq3.setEmail("user3@aiventures.com");
+                userReq3.setPassword("password123"); // la contraseña será hasheada en el servicio
+                userReq3.setCompanyId(company3.getId());
+                User user3 = authService.registerUser(userReq3);
 
                 companyRepository.saveAll(Arrays.asList(company1, company2, company3));
                 log.info("Compañías y usuarios creados");
@@ -146,18 +165,6 @@ public class DataInitializer {
         return c;
     }
 
-    private User createUser(String firstName, String lastName, String email,
-                            String password, Role role, Company company) {
-        User u = new User();
-        u.setFirstName(firstName);
-        u.setLastName(lastName);
-        u.setEmail(email);
-        u.setPassword(password); // recuerda hashear en producción
-        u.setRole(role);
-        u.setCompany(company);
-        return u;
-    }
-
     private Restriction createRestriction(Company company, AIModel model,
                                           int maxReq, int maxTok, String windowType) {
         Restriction r = new Restriction();
@@ -178,6 +185,8 @@ public class DataInitializer {
         l.setMaxRequestsPerWindow(maxReq);
         l.setMaxTokensPerWindow(maxTok);
         l.setWindowType(windowType);
+        l.setWindowStartTime(LocalDateTime.now());
+        l.setWindowEndTime(LimitService.calculateWindowEndTime(LocalDateTime.now(), windowType));
         l.setCreatedAt(LocalDateTime.now());
         return l;
     }

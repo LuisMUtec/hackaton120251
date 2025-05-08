@@ -2,6 +2,8 @@ package com.example.sparkyaisystem.service;
 
 import com.azure.ai.inference.ChatCompletionsClient;
 import com.azure.ai.inference.models.*;
+import com.azure.core.util.BinaryData;
+import com.example.sparkyaisystem.model.dto.request.MultimodalRequest;
 import com.example.sparkyaisystem.model.entity.AIModel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,6 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 
 /**
@@ -139,61 +143,47 @@ public class GitHubModelsService {
      * @return The model's response
      * @throws IOException If there's an error processing the image
      */
-    public String processMultimodalRequest(AIModel model, String message, MultipartFile imageFile) throws IOException {
-        log.info("Processing multimodal request with model: {}, message length: {}, image: {}", 
+    public String processMultimodalRequest(AIModel model,
+                                           String message,  MultipartFile imageFile) throws IOException {
+
+
+        log.info("Processing multimodal request with model: {}, message length: {}, image: {}",
                 model.getName(), message.length(), imageFile.getOriginalFilename());
-        
-        // Validate image file
+
         validateImageFile(imageFile);
-        
-        try {
-            // Only OpenAI o4-mini supports multimodal in our setup
-            if (model.getProvider().equalsIgnoreCase("OpenAI") && model.getName().equalsIgnoreCase("o4-mini")) {
-                // Get the model reference for GitHub Models SDK
-                String githubModel = openaiModel;
-                
-                // Encode image to base64
-                byte[] imageBytes = imageFile.getBytes();
-                String base64Image = Base64.getEncoder().encodeToString(imageBytes);
-                String dataUri = "data:image/" + getImageType(imageFile) + ";base64," + base64Image;
-                
-                // Create message content with both text and image
-                List<ChatMessageContentItem> contentItems = new ArrayList<>();
-                contentItems.add(new ChatMessageTextContentItem(message));
-                
-                // Create image content item with data URI
-                ChatMessageImageUrl imageUrl = new ChatMessageImageUrl(dataUri);
-                contentItems.add(new ChatMessageImageContentItem(imageUrl));
-                
-                // Create user message with content
-                ChatRequestUserMessage userMessage = new ChatRequestUserMessage(contentItems.toString());
-                
-                // Create chat messages
-                List<ChatRequestMessage> chatMessages = new ArrayList<>();
-                chatMessages.add(new ChatRequestSystemMessage("You are a helpful assistant that can analyze images."));
-                chatMessages.add(userMessage);
-                
-                // Create chat completion options
-                ChatCompletionsOptions options = new ChatCompletionsOptions(chatMessages);
-                options.setModel(githubModel);
-                
-                // Make API call to GitHub Models
-                log.debug("Sending multimodal request to GitHub Models SDK with model: {}", githubModel);
-                ChatCompletions completions = chatCompletionsClient.complete(options);
-                
-                // Extract and return the response
-                String response = completions.getChoice().getMessage().getContent();
-                log.info("Successfully received multimodal response from GitHub Models SDK");
-                
-                return response;
-            } else {
-                return "Multimodal requests are currently only supported for OpenAI o4-mini model";
-            }
-        } catch (Exception e) {
-            log.error("Error processing multimodal request with GitHub Models SDK: {}", e.getMessage(), e);
-            return "Error processing multimodal request: " + e.getMessage();
+
+        if (!"OpenAI".equalsIgnoreCase(model.getProvider())
+                || !"gpt-4o".equalsIgnoreCase(model.getName())) {
+            return "Multimodal requests are currently only supported for OpenAI gpt-4o model";
         }
+
+        // 1) Persist the uploaded image to a temp file
+        byte[] imageBytes = imageFile.getBytes();
+        Path tmp = Files.createTempFile("upload-", ".jpg");
+        Files.write(tmp, imageBytes);
+
+        // 2) Build the chat content
+        List<ChatMessageContentItem> contentItems = List.of(
+                new ChatMessageTextContentItem(message),
+                new ChatMessageImageContentItem(tmp, getImageType(imageFile))
+        );
+        List<ChatRequestMessage> chatMessages = List.of(
+                new ChatRequestSystemMessage("You are a helpful assistant that can analyze images."),
+                new ChatRequestUserMessage(BinaryData.fromObject(contentItems))
+        );
+
+        // 3) Dispatch to your vision-enabled GPT-4o deployment
+        ChatCompletionsOptions opts = new ChatCompletionsOptions(chatMessages)
+                .setModel(openaiModel);
+        log.debug("Sending multimodal request to Azure OpenAI deployment: {}", openaiModel);
+
+        ChatCompletions resp = chatCompletionsClient.complete(opts);
+        String answer = resp.getChoices().get(0).getMessage().getContent();
+        log.info("Successfully received multimodal response");
+
+        return answer;
     }
+
 
     /**
      * Estimate the number of tokens that will be consumed by a request.
@@ -224,7 +214,7 @@ public class GitHubModelsService {
         
         if (provider.contains("deepseek") || modelName.contains("deepseek")) {
             return deepseekModel;
-        } else if (provider.contains("openai") || modelName.contains("o4")) {
+        } else if (provider.contains("openai") || modelName.contains("o4") || modelName.contains("gpt-4o")) {
             return openaiModel;
         } else if (provider.contains("meta") || provider.contains("llama") || 
                   modelName.contains("llama") || modelName.contains("scout")) {

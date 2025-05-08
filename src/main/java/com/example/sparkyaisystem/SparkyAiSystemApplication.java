@@ -13,8 +13,14 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class SparkyAiSystemApplication {
 
+
+
     public static void main(String[] args) {
-        Dotenv dotenv = Dotenv.configure().load();
+        // Cargar variables del .env
+        Dotenv dotenv = Dotenv.configure()
+                .filename(".env")
+                .ignoreIfMissing()
+                .load();
         
         // Database properties
         System.setProperty("JDBC_DATABASE_URL", dotenv.get("JDBC_DATABASE_URL"));

@@ -265,7 +265,7 @@ public class LimitService {
                 user.getEmail(), model.getName(), limit.getUsedRequests(), limit.getUsedTokens());
     }
 
-    private LocalDateTime calculateWindowEndTime(LocalDateTime startTime, String windowType) {
+    public static LocalDateTime calculateWindowEndTime(LocalDateTime startTime, String windowType) {
         switch (windowType.toLowerCase()) {
             case "daily":
                 return startTime.plusDays(1);

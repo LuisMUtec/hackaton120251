@@ -1,5 +1,6 @@
 package com.example.sparkyaisystem.model.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -19,7 +20,8 @@ public class MultimodalRequest {
 
     @NotBlank(message = "Message content is required")
     private String message;
-    
+
+    @JsonIgnore
     @NotNull(message = "Image file is required")
     private MultipartFile imageFile;
 }
