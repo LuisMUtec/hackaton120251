@@ -25,6 +25,10 @@ public class SparkyAiSystemApplication {
         System.setProperty("JWT_SECRET_KEY", dotenv.get("JWT_SECRET_KEY"));
         System.setProperty("JWT_EXPIRATION", dotenv.get("JWT_EXPIRATION"));
 
+        // GitHub properties (add these if they're needed)
+        System.setProperty("GITHUB_API_KEY", dotenv.get("GITHUB_API_KEY"));
+
+
         SpringApplication.run(SparkyAiSystemApplication.class, args);
     }
 }

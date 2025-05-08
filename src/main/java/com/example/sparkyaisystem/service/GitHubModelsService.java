@@ -1,22 +1,37 @@
 package com.example.sparkyaisystem.service;
 
+import com.azure.ai.inference.ChatCompletionsClient;
+import com.azure.ai.inference.models.*;
 import com.example.sparkyaisystem.model.entity.AIModel;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.util.Random;
+import java.util.*;
 
 /**
  * Service for interacting with GitHub Models SDK.
- * This is a mock implementation that simulates responses from different AI models.
- * In a real application, this would use the actual GitHub Models SDK.
+ * This implementation uses the Azure Inference SDK to interact with GitHub's AI model inference endpoint.
  */
 @Service
 @Slf4j
 public class GitHubModelsService {
 
+    @Autowired
+    private ChatCompletionsClient chatCompletionsClient;
+    
+    @Value("${github.models.deepseek}")
+    private String deepseekModel;
+    
+    @Value("${github.models.openai}")
+    private String openaiModel;
+    
+    @Value("${github.models.llama}")
+    private String llamaModel;
+    
     private final Random random = new Random();
 
     /**
@@ -30,14 +45,40 @@ public class GitHubModelsService {
     public String processChatRequest(AIModel model, String message, String systemPrompt) {
         log.info("Processing chat request with model: {}, message length: {}", model.getName(), message.length());
         
-        // Simulate processing time
-        simulateProcessingTime(model);
-        
-        // Generate response based on model provider
-        String response = generateChatResponse(model, message, systemPrompt);
-        
-        log.info("Chat request processed successfully with model: {}", model.getName());
-        return response;
+        try {
+            // Determine which GitHub model to use based on provided AIModel
+            String githubModel = mapToGitHubModel(model);
+            
+            // Create chat messages
+            List<ChatRequestMessage> chatMessages = new ArrayList<>();
+            
+            // Add system prompt if provided
+            if (systemPrompt != null && !systemPrompt.isEmpty()) {
+                chatMessages.add(new ChatRequestSystemMessage(systemPrompt));
+            } else {
+                chatMessages.add(new ChatRequestSystemMessage("You are a helpful assistant."));
+            }
+            
+            // Add user message
+            chatMessages.add(new ChatRequestUserMessage(message));
+            
+            // Create chat completion options
+            ChatCompletionsOptions options = new ChatCompletionsOptions(chatMessages);
+            options.setModel(githubModel);
+            
+            // Make API call to GitHub Models
+            log.debug("Sending request to GitHub Models SDK with model: {}", githubModel);
+            ChatCompletions completions = chatCompletionsClient.complete(options);
+            
+            // Extract and return the response
+            String response = completions.getChoice().getMessage().getContent();
+            log.info("Successfully received response from GitHub Models SDK");
+            
+            return response;
+        } catch (Exception e) {
+            log.error("Error processing chat request with GitHub Models SDK: {}", e.getMessage(), e);
+            return "Error processing request: " + e.getMessage();
+        }
     }
 
     /**
@@ -52,14 +93,41 @@ public class GitHubModelsService {
     public String processCompletionRequest(AIModel model, String prompt, Integer maxTokens, Float temperature) {
         log.info("Processing completion request with model: {}, prompt length: {}", model.getName(), prompt.length());
         
-        // Simulate processing time
-        simulateProcessingTime(model);
-        
-        // Generate response based on model provider
-        String response = generateCompletionResponse(model, prompt, maxTokens, temperature);
-        
-        log.info("Completion request processed successfully with model: {}", model.getName());
-        return response;
+        try {
+            // For completion requests, we'll use the chat API with just the user message
+            String githubModel = mapToGitHubModel(model);
+            
+            // Create chat messages (for completion, we just send the prompt as a user message)
+            List<ChatRequestMessage> chatMessages = new ArrayList<>();
+            chatMessages.add(new ChatRequestUserMessage(prompt));
+            
+            // Create chat completion options
+            ChatCompletionsOptions options = new ChatCompletionsOptions(chatMessages);
+            options.setModel(githubModel);
+            
+            // Set max tokens if provided
+            if (maxTokens != null) {
+                options.setMaxTokens(maxTokens);
+            }
+            
+            // Set temperature if provided
+            if (temperature != null) {
+                options.setTemperature(Double.valueOf(temperature));
+            }
+            
+            // Make API call to GitHub Models
+            log.debug("Sending completion request to GitHub Models SDK with model: {}", githubModel);
+            ChatCompletions completions = chatCompletionsClient.complete(options);
+            
+            // Extract and return the response
+            String response = completions.getChoice().getMessage().getContent();
+            log.info("Successfully received completion response from GitHub Models SDK");
+            
+            return response;
+        } catch (Exception e) {
+            log.error("Error processing completion request with GitHub Models SDK: {}", e.getMessage(), e);
+            return "Error processing completion request: " + e.getMessage();
+        }
     }
 
     /**
@@ -78,15 +146,53 @@ public class GitHubModelsService {
         // Validate image file
         validateImageFile(imageFile);
         
-        // Simulate processing time (multimodal takes longer)
-        simulateProcessingTime(model);
-        simulateProcessingTime(model); // Extra time for image processing
-        
-        // Generate response based on model provider
-        String response = generateMultimodalResponse(model, message, imageFile.getOriginalFilename());
-        
-        log.info("Multimodal request processed successfully with model: {}", model.getName());
-        return response;
+        try {
+            // Only OpenAI o4-mini supports multimodal in our setup
+            if (model.getProvider().equalsIgnoreCase("OpenAI") && model.getName().equalsIgnoreCase("o4-mini")) {
+                // Get the model reference for GitHub Models SDK
+                String githubModel = openaiModel;
+                
+                // Encode image to base64
+                byte[] imageBytes = imageFile.getBytes();
+                String base64Image = Base64.getEncoder().encodeToString(imageBytes);
+                String dataUri = "data:image/" + getImageType(imageFile) + ";base64," + base64Image;
+                
+                // Create message content with both text and image
+                List<ChatMessageContentItem> contentItems = new ArrayList<>();
+                contentItems.add(new ChatMessageTextContentItem(message));
+                
+                // Create image content item with data URI
+                ChatMessageImageUrl imageUrl = new ChatMessageImageUrl(dataUri);
+                contentItems.add(new ChatMessageImageContentItem(imageUrl));
+                
+                // Create user message with content
+                ChatRequestUserMessage userMessage = new ChatRequestUserMessage(contentItems.toString());
+                
+                // Create chat messages
+                List<ChatRequestMessage> chatMessages = new ArrayList<>();
+                chatMessages.add(new ChatRequestSystemMessage("You are a helpful assistant that can analyze images."));
+                chatMessages.add(userMessage);
+                
+                // Create chat completion options
+                ChatCompletionsOptions options = new ChatCompletionsOptions(chatMessages);
+                options.setModel(githubModel);
+                
+                // Make API call to GitHub Models
+                log.debug("Sending multimodal request to GitHub Models SDK with model: {}", githubModel);
+                ChatCompletions completions = chatCompletionsClient.complete(options);
+                
+                // Extract and return the response
+                String response = completions.getChoice().getMessage().getContent();
+                log.info("Successfully received multimodal response from GitHub Models SDK");
+                
+                return response;
+            } else {
+                return "Multimodal requests are currently only supported for OpenAI o4-mini model";
+            }
+        } catch (Exception e) {
+            log.error("Error processing multimodal request with GitHub Models SDK: {}", e.getMessage(), e);
+            return "Error processing multimodal request: " + e.getMessage();
+        }
     }
 
     /**
@@ -104,184 +210,39 @@ public class GitHubModelsService {
         return baseEstimate + random.nextInt(variance * 2) - variance;
     }
 
-    // Private helper methods
-
-    private void simulateProcessingTime(AIModel model) {
-        try {
-            // Simulate different processing times based on model provider and complexity
-            int baseTime = 200; // Base processing time in milliseconds
-            
-            if ("OpenAI".equalsIgnoreCase(model.getProvider())) {
-                if (model.getName().contains("GPT-4")) {
-                    baseTime = 500; // GPT-4 is slower
-                }
-            } else if ("Meta".equalsIgnoreCase(model.getProvider())) {
-                if (model.getName().contains("70B")) {
-                    baseTime = 600; // Larger models are slower
-                }
-            }
-            
-            // Add some randomness
-            int processingTime = baseTime + random.nextInt(200);
-            Thread.sleep(processingTime);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+    // Helper methods
+    
+    /**
+     * Maps our internal AIModel to the appropriate GitHub Models SDK model identifier.
+     *
+     * @param model Our internal AIModel
+     * @return The GitHub Models SDK model identifier
+     */
+    private String mapToGitHubModel(AIModel model) {
+        String provider = model.getProvider().toLowerCase();
+        String modelName = model.getName().toLowerCase();
+        
+        if (provider.contains("deepseek") || modelName.contains("deepseek")) {
+            return deepseekModel;
+        } else if (provider.contains("openai") || modelName.contains("o4")) {
+            return openaiModel;
+        } else if (provider.contains("meta") || provider.contains("llama") || 
+                  modelName.contains("llama") || modelName.contains("scout")) {
+            return llamaModel;
+        } else {
+            // Default to DeepSeek if we can't determine the model
+            log.warn("Could not determine GitHub model for {}/{}. Defaulting to DeepSeek.", 
+                    model.getProvider(), model.getName());
+            return deepseekModel;
         }
     }
-
-    private String generateChatResponse(AIModel model, String message, String systemPrompt) {
-        String provider = model.getProvider().toLowerCase();
-        String modelName = model.getName();
-        
-        StringBuilder response = new StringBuilder();
-        
-        // Add system prompt context if provided
-        if (systemPrompt != null && !systemPrompt.isEmpty()) {
-            response.append("Using context: ").append(systemPrompt).append("\n\n");
+    
+    private String getImageType(MultipartFile imageFile) {
+        String contentType = imageFile.getContentType();
+        if (contentType != null && contentType.startsWith("image/")) {
+            return contentType.substring(6); // Return image type (jpeg, png, etc.)
         }
-        
-        if (provider.contains("openai")) {
-            if (modelName.contains("GPT-4")) {
-                response.append("GPT-4: I'm an advanced AI assistant created by OpenAI. ");
-            } else {
-                response.append("GPT-3.5: I'm an efficient AI assistant created by OpenAI. ");
-            }
-            response.append("In response to your question about '")
-                   .append(message.length() > 20 ? message.substring(0, 20) + "..." : message)
-                   .append("', I can provide the following insights:\n\n");
-            
-            // Generate a more detailed response based on the message content
-            if (message.toLowerCase().contains("artificial intelligence") || message.toLowerCase().contains("ai")) {
-                response.append("Artificial Intelligence (AI) refers to systems designed to perform tasks that typically require human intelligence. ")
-                       .append("These include learning, reasoning, problem-solving, perception, and language understanding. ")
-                       .append("The field has seen significant advancements in recent years, particularly with the development of deep learning techniques.");
-            } else if (message.toLowerCase().contains("machine learning") || message.toLowerCase().contains("ml")) {
-                response.append("Machine Learning is a subset of AI that focuses on developing algorithms that can learn from and make predictions based on data. ")
-                       .append("Popular approaches include supervised learning, unsupervised learning, and reinforcement learning. ")
-                       .append("These techniques have applications in various fields including computer vision, natural language processing, and recommendation systems.");
-            } else {
-                response.append("I'd be happy to help with your query. Could you provide more specific details about what you'd like to know? ")
-                       .append("I can provide information on a wide range of topics including science, technology, history, arts, and more.");
-            }
-        } else if (provider.contains("meta")) {
-            response.append("Llama AI: As Meta's language model, I can assist with your query about '")
-                   .append(message.length() > 20 ? message.substring(0, 20) + "..." : message)
-                   .append("'.\n\n")
-                   .append("Meta's AI models are designed to be helpful, harmless, and honest. ")
-                   .append("I aim to provide accurate and useful information while acknowledging my limitations. ")
-                   .append("If you have more questions or need clarification, please feel free to ask.");
-        } else if (provider.contains("deepspeak")) {
-            response.append("DeepSpeak: Analyzing your query about '")
-                   .append(message.length() > 20 ? message.substring(0, 20) + "..." : message)
-                   .append("'.\n\n")
-                   .append("Our specialized conversational AI is designed to provide concise and accurate responses. ")
-                   .append("We focus on delivering clear information without unnecessary elaboration. ")
-                   .append("If you need more details on any aspect of my response, please ask for specific clarification.");
-        } else {
-            response.append("AI Assistant: I've processed your message and here's my response: ")
-                   .append("This is a simulated response from a generic AI model. In a real implementation, ")
-                   .append("this would be replaced with actual responses from the GitHub Models SDK.");
-        }
-        
-        return response.toString();
-    }
-
-    private String generateCompletionResponse(AIModel model, String prompt, Integer maxTokens, Float temperature) {
-        String provider = model.getProvider().toLowerCase();
-        String modelName = model.getName();
-        
-        StringBuilder response = new StringBuilder();
-        
-        if (provider.contains("openai")) {
-            if (modelName.contains("Whisper")) {
-                response.append("Whisper transcription: ")
-                       .append("This is a simulated transcription of audio content. ")
-                       .append("The Whisper model would typically convert spoken language into written text with high accuracy, ")
-                       .append("supporting multiple languages and handling various accents and background noise.");
-            } else {
-                response.append(prompt)
-                       .append(" [OpenAI continuation] ")
-                       .append("The model continues the text with coherent and contextually appropriate content. ")
-                       .append("The temperature setting of ")
-                       .append(temperature != null ? temperature : "default")
-                       .append(" affects the creativity and randomness of the response.");
-            }
-        } else if (provider.contains("meta")) {
-            response.append(prompt)
-                   .append(" [Meta Llama continuation] ")
-                   .append("The open-source large language model generates text that follows logically from the prompt. ")
-                   .append("The model aims to produce helpful, accurate, and ethical content without harmful biases.");
-        } else if (provider.contains("deepspeak")) {
-            response.append(prompt)
-                   .append(" [DeepSpeak continuation] ")
-                   .append("Our specialized text completion engine extends your input with relevant and focused content. ")
-                   .append("We prioritize clarity and precision in our generated text, maintaining the style and intent of the original prompt.");
-        } else {
-            response.append(prompt)
-                   .append(" [AI continuation] ")
-                   .append("This is a simulated text completion from a generic AI model. In a real implementation, ")
-                   .append("this would be replaced with actual completions from the GitHub Models SDK.");
-        }
-        
-        // Simulate respecting the maxTokens parameter
-        if (maxTokens != null && maxTokens < 100 && response.length() > maxTokens * 4) {
-            return response.substring(0, maxTokens * 4) + "...";
-        }
-        
-        return response.toString();
-    }
-
-    private String generateMultimodalResponse(AIModel model, String message, String fileName) {
-        String provider = model.getProvider().toLowerCase();
-        String modelName = model.getName();
-        
-        StringBuilder response = new StringBuilder();
-        
-        if (provider.contains("openai") && modelName.contains("DALL-E")) {
-            response.append("DALL-E 3 image analysis: ")
-                   .append("I've analyzed the image '")
-                   .append(fileName)
-                   .append("'. ")
-                   .append("In a real implementation, DALL-E would generate images based on text prompts rather than analyze them. ")
-                   .append("For image analysis, GPT-4 with vision capabilities would be more appropriate.");
-        } else if (provider.contains("openai")) {
-            response.append("OpenAI multimodal analysis: ")
-                   .append("I've analyzed the image '")
-                   .append(fileName)
-                   .append("' in the context of your message: '")
-                   .append(message)
-                   .append("'. ")
-                   .append("The image appears to contain visual elements that I would describe in detail in a real implementation. ")
-                   .append("I can identify objects, scenes, text, and other content within images to provide comprehensive responses.");
-        } else if (provider.contains("meta")) {
-            response.append("Meta AI vision analysis: ")
-                   .append("Based on the image '")
-                   .append(fileName)
-                   .append("' and your query: '")
-                   .append(message)
-                   .append("', ")
-                   .append("I can provide insights about the visual content. Meta's multimodal models are designed to understand ")
-                   .append("the relationship between text and images, enabling more contextual and relevant responses.");
-        } else if (provider.contains("deepspeak")) {
-            response.append("DeepSpeak Vision analysis: ")
-                   .append("I've processed the image '")
-                   .append(fileName)
-                   .append("' along with your text input: '")
-                   .append(message)
-                   .append("'. ")
-                   .append("Our specialized vision system can detect objects, recognize patterns, and interpret visual information ")
-                   .append("to provide accurate and relevant responses to multimodal queries.");
-        } else {
-            response.append("Multimodal AI analysis: ")
-                   .append("This is a simulated response for image '")
-                   .append(fileName)
-                   .append("' and text '")
-                   .append(message)
-                   .append("'. ")
-                   .append("In a real implementation, this would be replaced with actual multimodal analysis from the GitHub Models SDK.");
-        }
-        
-        return response.toString();
+        return "jpeg"; // Default to jpeg if content type is not available
     }
 
     private void validateImageFile(MultipartFile file) throws IOException {
@@ -300,7 +261,5 @@ public class GitHubModelsService {
         if (contentType == null || !(contentType.startsWith("image/"))) {
             throw new IOException("File must be an image");
         }
-        
-        // In a real implementation, we might also check for valid image format, dimensions, etc.
     }
 }

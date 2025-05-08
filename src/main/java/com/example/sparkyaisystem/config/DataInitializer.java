@@ -29,20 +29,14 @@ public class DataInitializer {
             if (aiModelRepository.count() == 0) {
                 log.info("Initializing AI models...");
                 List<AIModel> models = Arrays.asList(
-                    // OpenAI models
-                    createModel("GPT-4", "OpenAI", "chat", "Advanced language model for chat interactions"),
-                    createModel("GPT-3.5-Turbo", "OpenAI", "chat", "Efficient language model for chat interactions"),
-                    createModel("DALL-E 3", "OpenAI", "multimodal", "Image generation model"),
-                    createModel("Whisper", "OpenAI", "completion", "Speech to text model"),
+                    // OpenAI model
+                    createModel("o4-mini", "OpenAI", "multimodal", "OpenAI's efficient multimodal model capable of processing both text and images"),
                     
-                    // Meta models
-                    createModel("Llama 2", "Meta", "chat", "Open source large language model"),
-                    createModel("Llama 2 70B", "Meta", "completion", "Larger parameter version of Llama 2"),
+                    // DeepSeek model
+                    createModel("DeepSeek-V3-0324", "DeepSeek", "chat", "DeepSeek's advanced language model optimized for detailed understanding and reasoning"),
                     
-                    // DeepSpeak models
-                    createModel("DeepSpeak Chat", "DeepSpeak", "chat", "Specialized conversational AI"),
-                    createModel("DeepSpeak Vision", "DeepSpeak", "multimodal", "Image analysis and understanding"),
-                    createModel("DeepSpeak Text", "DeepSpeak", "completion", "Text generation and completion")
+                    // Meta/Llama model
+                    createModel("Llama-4-Scout-17B-16E-Instruct", "Meta", "chat", "Meta's efficient instruction-following model with 17 billion parameters and 16 experts")
                 );
                 
                 aiModelRepository.saveAll(models);
